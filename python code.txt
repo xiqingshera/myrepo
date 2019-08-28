@@ -1,0 +1,218 @@
+-------the main process to clean company house data ( get company's information not only in 2013 but also exist after 5 years)---------
+(for diversed analysis, data cleaning still uses excel to do further)-------
+import numpy as np
+import pandas as pd
+
+ch2013 = pd.read_csv("CH2013.csv", low_memory=False)
+
+columns_to_save = [
+    "companynumber", "countryoforigin", "dissolutiondate", "incorporationdate", "addressline1", 
+    "addressline2", "posttown", "postcode", "companycategory", "companyname", "companystatus", "siccode"]
+
+ch2013 = ch2013.loc[:, columns_to_save]
+
+ch2018 = pd.read_csv("CH2018.csv", low_memory=False, encoding='Latin_1')
+
+ch2013.dropna(subset=['postcode', 'incorporationdate', 'siccode', 'companynumber'], inplace=True)
+ch2018.dropna(subset=['postcode', 'IncorporationDate', 'siccode', ' CompanyNumber'], inplace=True)
+
+sic_digital = (26110,26120,26200,26400,26511,26512,26800,33130,
+58210,58290,62011,62012,62020,62030,62090,63110, 63120,95110)
+
+sic_science = (21100,21200,26600,26701,32500,72110,75000,86101,
+86102,86210,86220,86230,86900)
+
+sic_publishing = (26301,26309,26702,58110,58120,58130,58141,58142,
+58190,59111,59112,59113,59120,59131,59132,59133,
+59140,59200,60100,60200,61100,61200, 61300,61900,
+63910,63990,73110,73120,73200,74100,74201,74202,
+74203,74209,95120)
+
+sic_otherScManuf = (19201,19209,20110,20120,20130,95210,95220,95250,
+20140,20150,20160,20170,20200,20301,20302,20411,
+20412,20420,20510,20520,20530,20590,20600,25210,
+25300,25400,26513,26514,26520,27110,27120,27200,
+27310,27320,27330,27400,27510,27520,27900,28110,
+28120,28131,28132,28140,28150,28210,28220,28230,
+28240,28250,28290,28301,28302,28410,28490,28910,
+28921,28922,28923,28930,28940,28950,28960,28990,
+29100,29201,29202,29203,29310,29320,30110,30120,
+30200,30300,30400,30910,30920,30990,32120,32401,
+33120,33140,33150,33160,33170)
+
+sic_otherScServices = (51101,51102,51210,51220,71111,71112,71121,71122,
+71129,71200,72190,72200,74901,74902,85410,85421,
+85422)
+
+from itertools import chain
+
+siccode_list = list(map(str, chain(sic_digital, sic_science, sic_publishing, sic_otherScManuf, sic_otherScServices)))
+
+ch2013 = ch2013.loc[ch2013['siccode'].isin(siccode_list), :]
+
+temp = ch2018['siccode'].str.split(' - ')
+ch2018['siccode'] = temp.apply(lambda x: x[0])
+ch2018 = ch2018.loc[ch2018['siccode'].isin(siccode_list), :]
+
+london_idx = ch2013['posttown'].str.replace(' ', '').str.upper().str.contains('LONDON')
+
+london_idx[london_idx.isna()] = False
+
+ch2013 = ch2013[london_idx]
+
+start = pd.datetime(year=2009, month=1, day=1)
+end = pd.datetime(year=2013, month=12, day=31)
+
+ch2018['IncorporationDate'] = pd.to_datetime(ch2018['IncorporationDate'])
+
+ch2018['ifCompanyExisted'] = 0 
+ch2018.loc[ch2018['dissolutiondate'].isna() , 'ifCompanyExisted'] = 1 //without dissolitiondate means company exists 
+
+ch2018.rename(columns={' CompanyNumber': 'companynumber'}, inplace=True)
+
+pd.Series(map(len, ch2013['companynumber'])).unique()
+pd.Series(map(len, ch2013['companynumber'])).unique()
+
+def add_zero(x: str):
+    if len(x) == 8:
+        return x
+    return '0' * (8 - len(x)) + x
+
+ch2018['companynumber'] = ch2018['companynumber'].apply(add_zero)
+
+df_merge = pd.merge(ch2013, ch2018, on='companynumber')
+matched_companynumber = df_merge['companynumber']
+
+ch2013_final = ch2013.loc[ch2013['companynumber'].isin(matched_companynumber)]//match dateset 2013 and 2018 by company number can make sure its the same company
+ch2018_final = ch2018.loc[ch2018['companynumber'].isin(matched_companynumber)]
+ch2013_final.head()
+ch2018_final.head()
+
+ch2013_final.to_csv('CH2013_11.csv', index=False)
+ch2018_final.to_csv('CH2018_11.csv', index=False)
+
+------chi test------
+import pandas as pd
+from matplotlib import pyplot as plt
+
+raw_data = pd.read_csv("afterdataall2013.csv", encoding='latin-1')
+useful_columns = ['siccode', 'ifCompanyExisted']
+data = raw_data[useful_columns].dropna()
+
+d = {
+'digital' : (26110,26120,26200,26400,26511,26512,26800,33130,
+                58210,58290,62011,62012,62020,62030,62090,63110,
+                63120,95110),
+'science' : (21100,21200,26600,26701,32500,72110,75000,86101,
+                86102,86210,86220,86230,86900),
+'publishing' : (26301,26309,26702,58110,58120,58130,58141,58142,
+                   58190,59111,59112,59113,59120,59131,59132,59133,
+                   59140,59200,60100,60200,61100,61200, 61300,61900,
+                   63910,63990,73110,73120,73200,74100,74201,74202,
+                   74203,74209,95120),
+'otherScManuf': (19201,19209,20110,20120,20130,95210,95220,95250,
+                     20140,20150,20160,20170,20200,20301,20302,20411,
+                     20412,20420,20510,20520,20530,20590,20600,25210,
+                     25300,25400,26513,26514,26520,27110,27120,27200,
+                     27310,27320,27330,27400,27510,27520,27900,28110,
+                     28120,28131,28132,28140,28150,28210,28220,28230,
+                     28240,28250,28290,28301,28302,28410,28490,28910,
+                     28921,28922,28923,28930,28940,28950,28960,28990,
+                     29100,29201,29202,29203,29310,29320,30110,30120,
+                     30200,30300,30400,30910,30920,30990,32120,32401,
+                     33120,33140,33150,33160,33170),
+'otherScServices': (51101,51102,51210,51220,71111,71112,71121,71122,
+                        71129,71200,72190,72200,74901,74902,85410,85421,
+                        85422)
+}
+replace_dict = {
+    sic : k
+    for k, v in d.items()
+    for sic in v
+}
+
+data['siccode'] = data['siccode'].replace(replace_dict)
+data.to_csv('chi data.csv',index=False)
+
+fig, ax = plt.subplots()
+plt.bar(data['ifCompanyExisted'].value_counts().index,data['ifCompanyExisted'].value_counts())
+plt.xlim(-0.5, 1.5)
+plt.xticks([0, 1])
+ax.set_xticklabels(['Not Existed', 'Existed'])
+plt.show()
+
+data["ifCompanyExisted"] = data["ifCompanyExisted"].astype(int)
+table = pd.DataFrame()
+table['Existed'] = data.groupby("siccode").sum()['ifCompanyExisted']
+table['NotExisted'] = data.groupby("siccode").count()['ifCompanyExisted'] - data.groupby("siccode").sum()['ifCompanyExisted']
+
+two_way_table = table.copy()
+table['TotalComNum'] = data.groupby("siccode").count().astype(int)
+table['Ratio'] = table['Existed'] / table['TotalComNum']
+table.index.name = 'Area'
+
+table.loc['Total', 'Existed'] = data['ifCompanyExisted'].sum()
+table.loc['Total', 'TotalComNum'] = data['ifCompanyExisted'].count()
+table.loc['Total', 'Ratio'] = data['ifCompanyExisted'].sum() / data['ifCompanyExisted'].count()
+table.loc['Total', 'NotExisted'] = data['ifCompanyExisted'].count() - data['ifCompanyExisted'].sum()
+table
+
+two_way_table
+
+from scipy.stats import chi2_contingency 
+two_way_table.values
+chi2, p, dof, expected = chi2_contingency(two_way_table.values)
+chi2
+p
+expected
+
+----------------------------------calculate outiers and make Homogeneity of variance test------------------------------------------------
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+from sklearn import model_selection
+import statsmodels.api as sm
+
+df = pd.read_csv('final.csv')
+train, test = model_selection.train_test_split(df.iloc[:, 1:], test_size=0.01, random_state = 2020)
+
+
+outliers = model.get_influence()
+leverage = outliers.hat_matrix_diag
+dffits = outliers.dffits[0]
+resid_stu = outliers.resid_studentized_external
+conta1 = pd.concat([pd.Series(leverage, name='leverage'), pd.Series(dffits, name='dffits'),
+                   pd.Series(resid_stu, name='resid_stu'), axis=1)
+train.index = range(train.shape[0])
+
+df_outliers = pd.concat([train, conta1], axis=1)
+outliers_ratio = sum(np.where((np.abs(df_outliers.resid_stu)>2),1, 0)) / df_outliers.shape[0]
+#outliers_ratio
+none_outliers = df_outliers.loc[np.abs(df_outliers.resid_stu)<=2, ]
+outliers = df_outliers.loc[np.abs(df_outliers.resid_stu)>2, ]
+outliers.to_csv('outliers.csv', index=False)
+model2 = sm.formula.ols('move ~ average + employees + schools', data = none_outliers).fit()
+
+
+ax1 = plt.subplot2grid(shape=(2,1), loc=(0,0))
+_ = ax1.scatter(none_outliers.average, model2.resid-model2.resid.mean() / model2.resid.std())
+_ = ax1.hlines(y=0, xmin = none_outliers.average.min(), xmax=none_outliers.average.max(), color='red', linestyles='--')
+_ = ax1.set_xlabel('business house price')
+_ = ax1.set_ylabel('Std_Residual')
+
+ax2 = plt.subplot2grid(shape=(2,1), loc=(1,0))
+_ = ax2.scatter(none_outliers.employees, model2.resid-model2.resid.mean() / model2.resid.std())
+_ = ax2.hlines(y=0, xmin = none_outliers.employees.min(), xmax=none_outliers.employees.max(), color='red', linestyles='--')
+_ = ax2.set_xlabel('employees')
+_ = ax2.set_ylabel('Std_Residual')
+
+ax3 = plt.subplot2grid(shape=(2,1), loc=(1,0))
+_ = ax3.scatter(none_outliers.schools, model2.resid-model2.resid.mean() / model2.resid.std())
+_ = ax3.hlines(y=0, xmin = none_outliers.schools.min(), xmax=none_outliers.employees.max(), color='red', linestyles='--')
+_ = ax3.set_xlabel('schools')
+_ = ax3.set_ylabel('Std_Residual')
+
+
+
+
