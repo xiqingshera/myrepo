@@ -1,0 +1,47 @@
+﻿
+//ssc install spatwmat
+//ssc install dataout
+//ssc install spatgsa
+//ssc install esttab
+cd "C:\Users\Shera\Desktop\metric3" 
+use "metric3data.dta",clear 
+------make matrix------
+spatwmat, name(W) xcoord(longt) ycoord(lat) band(0 2)  binary e(E) 
+mat2txt,matrix(W) saving(weights2) replace 
+dataout using weights2.txt,excel replace 
+spatgsa relocation move average employees school,weights(W) moran geary go twotail 
+
+
+spatwmat, name(WS) xcoord(longt) ycoord(lat) band(0 2) e(Es) standardize
+mat2txt,matrix(WS) saving(weightS) replace
+dataout using weightS.txt,excel replace 
+spatgsa relocation move average employees school,weights(WS) moran geary twotail 
+
+-----lisa indicator of all variables
+spatlsa relocation, id(name) weights(WS) moran graph(moran) symbol(id) savegraph(relocatLisa.wmf,replace)
+spatlsa average, id(name) weights(WS) moran graph(moran) symbol(id) savegraph(averageLisa.wmf,replace)
+spatlsa employees, id(name) weights(WS) moran graph(moran) symbol(id) savegraph(empLisa.wmf,replace)
+spatlsa school, id(name) weights(WS) moran graph(moran) symbol(id) savegraph(schLisa.wmf,replace)
+
+
+spatlsa relocation,weights(W) moran twotail
+spatlsa average,weights(W) moran twotail
+spatlsa employees,weights(W) moran twotail
+spatlsa school,weights(W) moran twotail
+
+******************************************
+*Model II ---- relocation as dependent variable-----------
+reg relocation average employees school 
+spatdiag,weights(W) 
+
+reg relocation average employees school 
+est sto OLS_II
+spatreg relocation average employees school,weights(W) e(E) model(lag) nolog 
+est sto SAR_II
+spatreg relocation average employees school,weights(W) e(E) model(error) nolog 
+est sto SEM_II
+esttab OLS_II SAR_II SEM_II using model_2.rtf,replace noobs r2 ar2 pr2 se(%6.4f) onecell star(* 0.1 ** 0.05 *** 0.01) ///
+compress nogap mtitles(OLS SAR SEM) aic bic scalars("ll Log lik.")
+
+
+
