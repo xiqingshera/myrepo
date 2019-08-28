@@ -1,0 +1,218 @@
+---------------return latitude and longitude------------------------- 
+rm(list = ls())
+gc()
+setwd("C:/Users/Shera/Desktop/map")
+
+install.packages("data.table")
+
+if(!require("devtools")) {
+  install.packages("devtools")
+}
+devtools::install_github("erzk/PostcodesioR")
+
+library(PostcodesioR) #get the latitude and longitude of the UK 
+library(data.table)
+library(leaflet)
+library(rgdal)
+library(tmap)
+library(geojsonio)
+library(ggplot2)
+library(GISTools)
+library(magrittr)
+library(spdep)
+library(RColorBrewer)
+library(httr)
+
+set_config(
+  use_proxy(url="127.0.0.1", port=1080)
+)
+
+ data_2013 <- fread("CH2013_11.csv")
+ data_2013$postcode <- gsub(" ","",data_2013$postcode)
+
+ data_2018 <- fread("CH2018_11.csv")
+ data_2018$postcode <- gsub(" ","",data_2018$postcode)
+
+ a <- list()
+ for(i in 1:dim(data_2013)[1]){
+   print(paste0("=================","start",i,"================="))
+   tryCatch(
+     expr = {a[[i]] <- postcode_lookup(data_2013$postcode[i])[,11:12]
+   },warning = function(w){
+     print("warning")
+     a[[i]] <<- data.frame(longitude = NA ,latitude = NA)
+   },error = function(e){
+     print("error")
+     a[[i]] <<-  data.frame(longitude = NA ,latitude = NA)
+   },finally = {
+     print(paste0("=================","done",i,"================="))
+   }
+
+   )
+ }
+
+------------use latitude and longitude to make maps of relocation in 2018( all the maps are made by this method, just change data and geographical boundaries)----------------
+rm(list = ls())
+gc()
+setwd("C:/Users/Shera/Desktop/relocation map")
+
+install.packages("data.table")
+
+library(PostcodesioR)
+library(data.table)
+library(leaflet)
+library(rgdal)
+library(tmap)
+library(geojsonio)
+library(ggplot2)
+library(GISTools)
+library(magrittr)
+library(spdep)
+library(RColorBrewer)
+
+data <- fread("original london.csv")
+
+
+EW <- geojsonio::geojson_read("Local_Authority_Districts_December_2015_Generalised_Clipped_Boundaries_in_Great_Britain.geojson", what = "sp")
+LondonMap <- EW[grep("^E09",EW@data$lad15cd),]
+qtm(LondonMap)
+
+tm_shape(LondonMap) +
+  tm_polygons(col = NA, alpha = 0.5)
+BNG = "+init=epsg:27700"
+WGS = "+init=epsg:4326"
+
+LondonMap_WGS <-  sp::spTransform(LondonMap, WGS)
+
+data_londonmove <- data[,.(Name,move
+)]
+
+LondonMap_WGS@data<-data_londonmove
+
+tm_shape(LondonMap_WGS) +
+  tm_polygons("move",
+              palette="Blues",
+              auto.palette.mapping=FALSE,
+              ,title="amounts"
+              ,breaks =  c(0,1,20,40,60,80,100,120,140,320)
+  )  + tm_legend(position = c('LEFT', 'bottom'))
+
+---------------------use latitude and longitudecount the number of schools in each area-----------
+rm(list = ls())
+gc()
+setwd("C:/Users/Shera/Desktop/relocation map")
+
+install.packages("data.table")
+install.packages('magrittr')
+library(data.table)
+library(tmap)
+library(rgdal)
+library(tmap)
+library(GISTools)
+library(magrittr)
+library(RColorBrewer)
+
+data<- fread("university_lon_lat.csv")
+
+BNG = "+init=epsg:27700"
+WGS = "+init=epsg:4326"
+england <- readOGR("./NUTS_Level2_UK2018/NUTS_Level_2_January_2018_Ultra_Generalised_Clipped_Boundaries_in_the_United_Kingdom.shp")
+
+tm_shape(england) +
+  tm_polygons(col = NA, alpha = 0.5)
+
+england_WGS <-  sp::spTransform(england, WGS)
+
+data_2018 <- data[,.(
+                     longitude = longitude1 ,
+                     latitude = latitude1
+)]
+
+coordinates(data_2018) <- c("longitude", "latitude")
+proj4string(data_2018) <- CRS(BNG)
+count_2018 <- poly.counts(data_2018, england_WGS)
+count_2018
+  england_WGS@data$count=count_2018
+fwrite(england_WGS@data,"data11.csv")
+
+
+
+-----use latitude and longitude to calculate the average price of house in each area(similar to count school number, but this part needs to calculate average number)------
+rm(list = ls())
+gc()
+setwd("C:/Users/Shera/Desktop/map")
+library(data.table)
+library(tmap)
+library(rgdal)
+library(tmap)
+library(GISTools)
+library(magrittr)
+library(RColorBrewer)
+
+
+EW <- geojsonio::geojson_read("Local_Authority_Districts_December_2015_Generalised_Clipped_Boundaries_in_Great_Britain.geojson", what = "sp")
+LondonMap <- EW[grep("^E09",EW@data$lad15cd),]
+BNG = "+init=epsg:27700"
+WGS = "+init=epsg:4326"
+LondonMap_WGS <-  sp::spTransform(LondonMap, WGS)
+
+data <- fread("2018 rental price.csv")
+data_2018 <- data[,.(companynumber = CompanyName,
+                     longitude = longitude2 ,
+                     latitude = latitude2,
+                      num = `rental price per m?/unit`
+
+)]
+coordinates(data_2018) <- c("longitude", "latitude")
+proj4string(data_2018) <- CRS(BNG)
+proj4string(LondonMap_WGS) <- CRS(BNG)
+data_2018 <- as(data_2018,"SpatialPoints")  
+a <- over(data_2018,LondonMap_WGS) 
+
+data_2018 <- data[,.(companynumber = CompanyName,
+                     longitude = longitude2 ,
+                     latitude = latitude2,
+
+)]
+data_2018$num <- as.numeric(data_2018$num)
+data_2018_all <- cbind(data_2018, a)
+
+data_merge <- data_2018_all[,.(value = mean(num)),.(lad15cd)]
+data_merge <- data_merge[!is.na(lad15cd)]
+data_merge$value[is.na(data_merge$value)] <- 0
+
+-----based on each area's name on polygons to get  latitude and longitude of each area( the  latitude and longitude will be used in Stata to make spatial matrix) ------
+m(list = ls())
+gc()
+setwd("C:/Users/Shera/Desktop/map")
+library(rgdal)
+library(ggmap)
+library(data.table)
+
+UK2018 <- readOGR("./NUTS_Level2_UK2018/NUTS_Level_2_January_2018_Ultra_Generalised_Clipped_Boundaries_in_the_United_Kingdom.shp")
+London <- readOGR("./Local_Authority_London/Local_Authority_London/Local_Authority_Districts_December_2015_Generalised_Clipped_Boundaries_in_Great_Britain.shp")
+
+
+London_save <- lapply(London@polygons, function(x){x@labpt})
+London_long <- unlist(London_save)[seq(1,760,2)]
+London_lat <- unlist(London_save)[seq(2,760,2)]
+London_save2 <- data.table(lad15nm = London@data$lad15nm,
+                           long = London_long,
+                           lat = London_lat
+                           )
+fwrite(London_save2,"London loglat.csv")
+
+
+---------OLS: make correlation matrix--------------------
+none_outlier <- read.csv("C:/Users/Shera/Desktop/cor/revise.csv",encoding='UTF-8',check.names=F)
+
+library(GGally)
+p <- ggpairs(
+  data = none_outlier, 
+  lower = list(continuous = wrap('smooth', colour = 'blue', se = FALSE)),
+  diag = list(continuous = wrap('barDiag', fill = 'steelblue', colour = 'blue'))) + 
+  theme(panel.grid.major = element_blank())
+
+p + theme(panel.grid = element_blank(), 
+          panel.background = element_blank(), panel.border = element_rect(linetype = 2, fill =NA))
+
